@@ -7,6 +7,7 @@
     masterMesasStore, 
     masterSalasStore, 
     masterJuegosStore, 
+    masterEmpleadosStore,
     userSalasStore as masterUserSalasStore,
     currentRoutePermissionsStore
   } from '../../controllers/master.store.js';
@@ -61,6 +62,206 @@
   let rdModalTipo = 'relleno'; // 'relleno' | 'devolucion'
   let rdModalMesa = null;
   let rdModalApertura = null;
+
+  // Modal de Opciones de Mesa
+  let isOpcionesModalOpen = false;
+  let selectedOpcionesGroup = null;
+  let isEditingNota = false;
+  let notaTexto = '';
+
+  // Datos de empleados y horas para Apertura
+  let localEmpleados = [];
+  let empleadoAperturaNombre = '';
+  let empleadoAperturaUuid = null;
+  let horaApertura = '';
+  let aperturaEmpSugTarget = false;
+  let aperturaEmpSugIndex = -1;
+
+  async function syncLocalEmpleados() {
+    try {
+      const stored = await getLocalItems('empleados');
+      if (Array.isArray(stored) && stored.length > 0) {
+        localEmpleados = stored;
+      }
+    } catch (_) {}
+  }
+
+  function setActualHoraApertura() {
+    const now = new Date();
+    horaApertura = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  }
+
+  function normalizeSearchStr(str) {
+    return String(str || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  }
+
+  $: allEmpleados = (() => {
+    const storeEmps = $masterEmpleadosStore || [];
+    if (storeEmps.length >= localEmpleados.length && storeEmps.length > 0) {
+      return storeEmps;
+    }
+    if (localEmpleados.length > 0) {
+      return localEmpleados;
+    }
+    return storeEmps;
+  })();
+
+  $: targetSalaId = (libro?.sala_id || null);
+  $: targetSalaUuid = (libro?.sala_uuid || null);
+
+  $: effectiveSalaUuid = (() => {
+    if (targetSalaUuid) return String(targetSalaUuid);
+    if (targetSalaId) return String(targetSalaId);
+    if (currentSala?.uuid) return String(currentSala.uuid);
+    if (currentSala?.id) return String(currentSala.id);
+    return null;
+  })();
+
+  $: listaEmpleados = (() => {
+    let filtered = allEmpleados.filter(e => {
+      if (e.activo !== undefined && (Number(e.activo) === 0 || e.activo === false || String(e.activo).toLowerCase() === 'false')) return false;
+      if (!effectiveSalaUuid) return true;
+      const eSala = String(e.sala_uuid || e.sala_id || '');
+      if (eSala && eSala === effectiveSalaUuid) return true;
+      return !eSala;
+    });
+
+    if (filtered.length === 0 && allEmpleados.length > 0) {
+      filtered = allEmpleados.filter(e => e.activo !== false && Number(e.activo) !== 0 && String(e.activo).toLowerCase() !== 'false');
+    }
+
+    return filtered.map(e => {
+      const fullName = [e.nombre, e.apellido].filter(Boolean).join(' ').trim() || e.nombre || (e.uuid ? `Empleado #${e.uuid.slice(0, 8)}` : `Empleado #${e.id}`);
+      return {
+        uuid: e.uuid || e.id,
+        id: e.uuid || e.id,
+        nombre: fullName,
+        cedula: e.cedula || '',
+        cargo_nombre: (e.cargo_nombre || '').trim() || 'General',
+        departamento_nombre: (e.departamento_nombre || '').trim(),
+        foto: e.foto || null,
+        sala_uuid: e.sala_uuid || e.sala_id
+      };
+    })
+    .filter(e => Boolean(e.nombre))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
+  })();
+
+  $: filteredAperturaEmpSuggestions = (() => {
+    if (!aperturaEmpSugTarget) return [];
+    const q = (empleadoAperturaNombre || '').trim();
+    if (!q) return (listaEmpleados || []).slice(0, 10);
+    const normQ = normalizeSearchStr(q);
+    const tokens = normQ.split(/\s+/).filter(Boolean);
+    return (listaEmpleados || []).filter(emp => {
+      const targetText = normalizeSearchStr(`${emp.nombre || ''} ${emp.cargo_nombre || ''} ${emp.cedula || ''}`);
+      return tokens.every(token => targetText.includes(token));
+    }).slice(0, 10);
+  })();
+
+  function handleFocusAperturaEmp() {
+    aperturaEmpSugTarget = true;
+    aperturaEmpSugIndex = -1;
+  }
+
+  function handleInputAperturaEmp(val) {
+    empleadoAperturaNombre = val;
+    empleadoAperturaUuid = null;
+    aperturaEmpSugTarget = true;
+    aperturaEmpSugIndex = -1;
+  }
+
+  function handleKeyDownAperturaEmp(e) {
+    if (!aperturaEmpSugTarget) return;
+    if (e.key === 'ArrowDown') {
+      if (filteredAperturaEmpSuggestions.length > 0) {
+        e.preventDefault();
+        aperturaEmpSugIndex = (aperturaEmpSugIndex + 1) % filteredAperturaEmpSuggestions.length;
+      }
+    } else if (e.key === 'ArrowUp') {
+      if (filteredAperturaEmpSuggestions.length > 0) {
+        e.preventDefault();
+        aperturaEmpSugIndex = (aperturaEmpSugIndex - 1 + filteredAperturaEmpSuggestions.length) % filteredAperturaEmpSuggestions.length;
+      }
+    } else if (e.key === 'Tab' || e.key === 'Enter') {
+      if (filteredAperturaEmpSuggestions.length > 0) {
+        e.preventDefault();
+        const selected = aperturaEmpSugIndex >= 0 ? filteredAperturaEmpSuggestions[aperturaEmpSugIndex] : filteredAperturaEmpSuggestions[0];
+        selectAperturaEmpSuggestion(selected);
+      }
+    } else if (e.key === 'Escape') {
+      aperturaEmpSugTarget = false;
+      aperturaEmpSugIndex = -1;
+    }
+  }
+
+  function selectAperturaEmpSuggestion(sug) {
+    empleadoAperturaNombre = sug.nombre || '';
+    empleadoAperturaUuid = sug.uuid || sug.id || null;
+    aperturaEmpSugTarget = false;
+    aperturaEmpSugIndex = -1;
+  }
+
+  function handleBlurAperturaEmp() {
+    setTimeout(() => {
+      aperturaEmpSugTarget = false;
+      aperturaEmpSugIndex = -1;
+    }, 200);
+  }
+
+  function handleOpenOpcionesModal(group) {
+    selectedOpcionesGroup = group;
+    notaTexto = group.apertura?.nota || group.cierre?.nota || '';
+    isEditingNota = false;
+    isOpcionesModalOpen = true;
+  }
+
+  function handleCloseOpcionesModal() {
+    isOpcionesModalOpen = false;
+    selectedOpcionesGroup = null;
+    isEditingNota = false;
+  }
+
+  async function handleGuardarNota() {
+    if (!selectedOpcionesGroup) return;
+    const lId = libro?.uuid || libroId || libro?.id;
+    const mId = selectedOpcionesGroup.mesaId;
+    if (!lId || !mId) return;
+
+    const nuevaNota = (notaTexto || '').trim() || null;
+
+    if (selectedOpcionesGroup.apertura) {
+      selectedOpcionesGroup.apertura.nota = nuevaNota;
+      const recUuid = selectedOpcionesGroup.apertura.uuid || selectedOpcionesGroup.apertura.id;
+      await upsertLocalItem('libro_arqueo_fichas', selectedOpcionesGroup.apertura);
+
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        await queueOutboxAction({
+          entity: 'libro_arqueo_fichas',
+          action: 'save',
+          endpoint: `/api/master/libros/${lId}/arqueo-fichas`,
+          method: 'POST',
+          payload: selectedOpcionesGroup.apertura,
+          uuid: recUuid
+        });
+      } else {
+        fetch(toBackendUrl(`/api/master/libros/${lId}/arqueo-fichas`), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(selectedOpcionesGroup.apertura)
+        }).catch(err => console.warn('Error syncing nota:', err));
+      }
+    }
+
+    arqueoRecords = [...arqueoRecords];
+    isEditingNota = false;
+    triggerToast('Nota guardada con éxito', 'success');
+  }
 
   // Resolver Sala del Libro
   $: currentSala = ($masterSalasStore || []).find(s => 
@@ -162,7 +363,11 @@
     const newQuantities = {};
 
     if (existingApertura) {
-      // Cargar cantidades guardadas en apertura
+      // Cargar cantidades y responsable guardados en apertura
+      empleadoAperturaNombre = existingApertura.empleado_apertura_nombre || '';
+      empleadoAperturaUuid = existingApertura.empleado_apertura_uuid || null;
+      horaApertura = existingApertura.hora_apertura || '';
+
       const fList = Array.isArray(existingApertura.fichas)
         ? existingApertura.fichas
         : (typeof existingApertura.fichas === 'string' ? JSON.parse(existingApertura.fichas || '[]') : []);
@@ -172,6 +377,10 @@
         if (v > 0) newQuantities[v] = f.cantidad ?? 0;
       }
     } else {
+      empleadoAperturaNombre = '';
+      empleadoAperturaUuid = null;
+      setActualHoraApertura();
+
       // 2. Traer cantidades por defecto de mesa.banca
       let bancaList = [];
       if (Array.isArray(mesaObj.banca)) {
@@ -198,6 +407,9 @@
 
   function limpiarFormulario() {
     formQuantities = {};
+    empleadoAperturaNombre = '';
+    empleadoAperturaUuid = null;
+    setActualHoraApertura();
   }
 
   // Cálculo de total en vivo del formulario de la izquierda
@@ -287,6 +499,9 @@
         tipo: 'apertura',
         fichas: fichasPayload,
         total,
+        hora_apertura: horaApertura || new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+        empleado_apertura_uuid: empleadoAperturaUuid || null,
+        empleado_apertura_nombre: empleadoAperturaNombre?.trim() || null,
         mesa_nombre: mesaObj?.nombre || '',
         juego_nombre: mesaObj?.juego_nombre || '',
         updated_at: new Date().toISOString()
@@ -574,6 +789,9 @@
 
     arqueoRecords = [...arqueoRecords];
     rdModalApertura = updatedApertura;
+    if (selectedOpcionesGroup) {
+      selectedOpcionesGroup = mesaGroups.find(g => g.mesaId === selectedOpcionesGroup.mesaId) || selectedOpcionesGroup;
+    }
   }
 
   // Callback cuando se guarda el Cierre desde el Modal
@@ -587,6 +805,9 @@
       arqueoRecords = [...arqueoRecords];
     } else {
       arqueoRecords = [...arqueoRecords, savedRecord];
+    }
+    if (selectedOpcionesGroup) {
+      selectedOpcionesGroup = mesaGroups.find(g => g.mesaId === selectedOpcionesGroup.mesaId) || selectedOpcionesGroup;
     }
   }
 
@@ -764,9 +985,28 @@
   $: totalGeneralCierre = mesaGroups.reduce((acc, g) => acc + (Number(g.cierre?.total) || 0), 0);
   $: totalGeneralDiferencia = (totalGeneralCierre + totalGeneralDevoluciones) - (totalGeneralApertura + totalGeneralRellenos);
 
+  function getSumAperturaChip(valor) {
+    return mesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0);
+  }
+  function getSumRellenosChip(valor) {
+    return mesaGroups.reduce((acc, g) => acc + (g.rellenosDevoluciones || []).filter(m => m.tipo === 'relleno').reduce((a, b) => a + getMovChipCount(b, valor), 0), 0);
+  }
+  function getSumDevolucionesChip(valor) {
+    return mesaGroups.reduce((acc, g) => acc + (g.rellenosDevoluciones || []).filter(m => m.tipo === 'devolucion').reduce((a, b) => a + getMovChipCount(b, valor), 0), 0);
+  }
+  function getSumCierreChip(valor) {
+    return mesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.cierre, valor) || 0) : 0), 0);
+  }
+  function getDifTotalChip(valor) {
+    const expected = getSumAperturaChip(valor) + getSumRellenosChip(valor) - getSumDevolucionesChip(valor);
+    return getSumCierreChip(valor) - expected;
+  }
+
   let unsubWs = null;
 
   onMount(() => {
+    syncLocalEmpleados();
+    setActualHoraApertura();
     unsubWs = subscribeToLibroUpdates(
       () => [libro?.uuid, libroId, libro?.id].filter(Boolean),
       ['arqueo_fichas'],
@@ -808,6 +1048,61 @@
             </option>
           {/each}
         </select>
+      </div>
+
+      <!-- Pitboss / Empleado que Apertura (con autocompletado y coincidencia Tab ⇥) -->
+      <div class="form-group">
+        <label for="apertura-pitboss" class="form-label">PITBOSS / EMPLEADO APERTURA:</label>
+        <div class="cell-autocomplete-container">
+          <input 
+            id="apertura-pitboss" 
+            type="text" 
+            class="form-input {aperturaEmpSugTarget ? 'input-active' : ''}" 
+            placeholder="Escriba Pitboss (coincidencias con Tab ⇥)..." 
+            value={empleadoAperturaNombre}
+            on:focus={handleFocusAperturaEmp}
+            on:input={(e) => handleInputAperturaEmp(e.target.value)}
+            on:keydown={handleKeyDownAperturaEmp}
+            on:blur={handleBlurAperturaEmp}
+            autocomplete="off"
+          />
+
+          {#if aperturaEmpSugTarget && filteredAperturaEmpSuggestions.length > 0}
+            <div class="inline-dropdown">
+              <div class="inline-dropdown-header">
+                <span>Coincidencias (<b>Tab ⇥</b> o clic):</span>
+              </div>
+              <ul class="inline-dropdown-list">
+                {#each filteredAperturaEmpSuggestions as sug, idx}
+                  <!-- svelte-ignore a11y-click-events-have-key-events -->
+                  <li 
+                    class="inline-dropdown-item {idx === aperturaEmpSugIndex ? 'selected' : ''}"
+                    on:mousedown|preventDefault={() => selectAperturaEmpSuggestion(sug)}
+                  >
+                    <div class="sug-info">
+                      <span class="sug-name">{sug.nombre}</span>
+                      {#if sug.cargo_nombre}
+                        <span class="sug-cargo">{sug.cargo_nombre}</span>
+                      {/if}
+                    </div>
+                    <span class="sug-tab-badge">Tab ⇥</span>
+                  </li>
+                {/each}
+              </ul>
+            </div>
+          {/if}
+        </div>
+      </div>
+
+      <!-- Hora de Apertura con Botón Rayito ⚡ -->
+      <div class="form-group">
+        <div class="hora-header-line">
+          <label for="apertura-hora" class="form-label">HORA APERTURA:</label>
+          <button type="button" class="btn-rayo" on:click={setActualHoraApertura} title="Usar hora actual">
+            ⚡ Usar hora actual
+          </button>
+        </div>
+        <input id="apertura-hora" type="time" class="form-input" bind:value={horaApertura} />
       </div>
 
       <!-- Denominaciones de Fichas (Ordenadas de Mayor a Menor) -->
@@ -858,14 +1153,13 @@
       <span>{tableHeaderTitle}</span>
     </div>
 
-    <!-- Tabla de Contenido con 3 Sublíneas por Mesa -->
+    <!-- Tabla de Contenido: 1 Sola Línea Consolidada por Mesa -->
     <div class="table-wrapper">
       <table class="drop-table arqueo-table">
         <thead>
           <tr>
             <th class="th-center th-num">N°</th>
             <th class="th-mesa">Mesa</th>
-            <th class="th-center th-movimiento"></th>
             {#each salaFichas as valor}
               <th class="th-center">$ {valor}</th>
             {/each}
@@ -876,7 +1170,7 @@
         <tbody>
           {#if isLoadingRecords}
             <tr>
-              <td colspan={salaFichas.length + 5} class="empty-state-cell">
+              <td colspan={salaFichas.length + 4} class="empty-state-cell">
                 <div class="loading-state-inline">
                   <div class="spinner-small"></div>
                   <span>Cargando arqueo de fichas...</span>
@@ -885,7 +1179,7 @@
             </tr>
           {:else if mesaGroups.length === 0}
             <tr>
-              <td colspan={salaFichas.length + 5} class="empty-state-cell">
+              <td colspan={salaFichas.length + 4} class="empty-state-cell">
                 <div class="empty-msg-box">
                   <p class="empty-text">
                     No hay mesas arqueadas para esta fecha. Seleccione una mesa en el formulario de la izquierda e ingrese las cantidades para aperturar.
@@ -902,123 +1196,23 @@
               {@const totalR = group.totalRellenos || 0}
               {@const totalD = group.totalDevoluciones || 0}
               {@const difTotal = hasCierre ? ((ciTotal + totalD) - (apTotal + totalR)) : null}
-              {@const totalRowsForMesa = 2 + allMovs.length + 1}
+              {@const canLiquidar = allMovs.length === 0}
+              {@const canEliminarMesa = allMovs.length === 0 && (!hasCierre || ciTotal === 0)}
 
-              <!-- Sub-fila 1: APERTURA -->
-              <tr class="drop-row row-apertura" class:mesa-first-row={true}>
-                <td class="td-center td-num" rowspan={totalRowsForMesa}>
+              <tr class="drop-row single-mesa-row">
+                <td class="td-center td-num">
                   <span class="index-num">{idx + 1}</span>
                 </td>
-                <td class="td-mesa" rowspan={totalRowsForMesa}>
+                <td class="td-mesa">
                   <div class="mesa-title-cell">
                     <span class="mesa-main-name">{group.mesaNombre}</span>
                     {#if group.juegoNombre}
                       <span class="mesa-sub-juego">{group.juegoNombre}</span>
                     {/if}
-                  </div>
-                </td>
-                <td class="td-center td-movimiento">
-                  <span class="mov-badge mov-apertura" title="Apertura">Apertura</span>
-                </td>
-                {#each salaFichas as valor}
-                  {@const apCount = getChipCount(group.apertura, valor)}
-                  <td class="td-center count-val">
-                    {apCount !== null ? apCount : '—'}
-                  </td>
-                {/each}
-                <td class="td-center td-total-val ap-total-cell">
-                  $ {formatMoney(apTotal)}
-                </td>
-                <td class="td-center td-acciones-cell" rowspan={totalRowsForMesa}>
-                  <div class="acciones-btn-col">
-                    <button 
-                      type="button" 
-                      class="btn-table-fill"
-                      on:click={() => handleOpenRellenoModal('relleno', group.mesaObj || { uuid: group.mesaId, id: group.mesaId, nombre: group.mesaNombre, juego_nombre: group.juegoNombre }, group.apertura)}
-                      title="Registrar Fill (Relleno) para esta mesa"
-                    >
-                      Fill
-                    </button>
-                    <button 
-                      type="button" 
-                      class="btn-table-cred"
-                      on:click={() => handleOpenRellenoModal('devolucion', group.mesaObj || { uuid: group.mesaId, id: group.mesaId, nombre: group.mesaNombre, juego_nombre: group.juegoNombre }, group.apertura)}
-                      title="Registrar Cred (Devolución) para esta mesa"
-                    >
-                      Cred
-                    </button>
-                    <button 
-                      type="button" 
-                      class="btn-arquear"
-                      on:click={() => handleOpenCierreModal(group)}
-                      title="Registrar o editar el Cierre de esta mesa"
-                    >
-                      Cierre
-                    </button>
-                    <button 
-                      type="button" 
-                      class="btn-liquidar"
-                      on:click={() => handleLiquidarMesa(group)}
-                      title="Liquidar mesa"
-                    >
-                      Liquidar
-                    </button>
-                    {#if canDelete}
-                      <button 
-                        type="button" 
-                        class="btn-eliminar"
-                        on:click={() => handleEliminarMesa(group)}
-                        title="Eliminar registro de esta mesa"
-                      >
-                        Eliminar
-                      </button>
+                    {#if group.apertura?.hora_apertura}
+                      <span class="mesa-hora-tag">🕒 {group.apertura.hora_apertura}</span>
                     {/if}
                   </div>
-                </td>
-              </tr>
-
-              <!-- Sub-filas dinámicas para cada RELLENO / DEVOLUCIÓN -->
-              {#each allMovs as mov}
-                <tr class="drop-row row-mov" class:row-relleno={mov.tipo === 'relleno'} class:row-devolucion={mov.tipo === 'devolucion'}>
-                  <td class="td-center td-movimiento">
-                    <span class="mov-badge {mov.tipo === 'relleno' ? 'mov-relleno' : 'mov-devolucion'}" title="{mov.tipo === 'relleno' ? 'Fill' : 'Cred'} {mov.numero || mov.codigo}">
-                      {formatMovBadge(mov, allMovs)}
-                    </span>
-                  </td>
-                  {#each salaFichas as valor}
-                    {@const count = getMovChipCount(mov, valor)}
-                    <td class="td-center count-val font-mono">
-                      {count > 0 ? count : '—'}
-                    </td>
-                  {/each}
-                  <td class="td-center td-total-val font-mono {mov.tipo === 'relleno' ? 'text-blue' : 'text-purple'}">
-                    $ {formatMoney(mov.total)}
-                  </td>
-                </tr>
-              {/each}
-
-              <!-- Sub-fila 2: CIERRE -->
-              <tr class="drop-row row-cierre">
-                <td class="td-center td-movimiento">
-                  <span class="mov-badge {hasCierre ? 'mov-cierre' : 'mov-pendiente'}" title="{hasCierre ? 'Cierre' : 'Pendiente de Cierre'}">
-                    Cierre
-                  </span>
-                </td>
-                {#each salaFichas as valor}
-                  {@const ciCount = hasCierre ? getChipCount(group.cierre, valor) : null}
-                  <td class="td-center count-val" class:val-pending={!hasCierre}>
-                    {ciCount !== null ? ciCount : '—'}
-                  </td>
-                {/each}
-                <td class="td-center td-total-val ci-total-cell" class:val-pending={!hasCierre}>
-                  {hasCierre ? `$ ${formatMoney(ciTotal)}` : '—'}
-                </td>
-              </tr>
-
-              <!-- Sub-fila 3: DIFERENCIA / TOTAL -->
-              <tr class="drop-row row-diferencia mesa-last-row">
-                <td class="td-center td-movimiento">
-                  <span class="mov-badge mov-diferencia" title="Total">Total</span>
                 </td>
                 {#each salaFichas as valor}
                   {@const apC = getChipCount(group.apertura, valor)}
@@ -1033,15 +1227,16 @@
                         class="dif-chips-val"
                         class:dif-pos={difChips > 0}
                         class:dif-neg={difChips < 0}
+                        class:dif-zero={difChips === 0}
                       >
-                        {Math.abs(difChips)}
+                        {difChips > 0 ? `+${difChips}` : (difChips < 0 ? `${difChips}` : '0')}
                       </span>
                     {:else}
                       <span class="val-pending">—</span>
                     {/if}
                   </td>
                 {/each}
-                <td class="td-center td-total-val dif-total-cell">
+                <td class="td-center td-total-val dif-total-cell font-mono font-bold">
                   {#if difTotal !== null}
                     <span 
                       class="dif-monto-badge"
@@ -1055,6 +1250,38 @@
                     <span class="val-pending">—</span>
                   {/if}
                 </td>
+                <td class="td-center td-acciones-cell">
+                  <div class="acciones-btn-row">
+                    <button 
+                      type="button" 
+                      class="btn-action-pill btn-action-liquidar"
+                      disabled={!canLiquidar}
+                      on:click={() => handleLiquidarMesa(group)}
+                      title={canLiquidar ? "Liquidar mesa (Cierre = Apertura)" : "Deshabilitado porque la mesa tiene Fills o Creds"}
+                    >
+                      Liquidar
+                    </button>
+                    <button 
+                      type="button" 
+                      class="btn-action-pill btn-action-opciones"
+                      on:click={() => handleOpenOpcionesModal(group)}
+                      title="Opciones de la mesa (Fills, Creds, Cierre, Nota y Detalle)"
+                    >
+                      Opciones
+                    </button>
+                    {#if canDelete}
+                      <button 
+                        type="button" 
+                        class="btn-action-pill btn-action-eliminar"
+                        disabled={!canEliminarMesa}
+                        on:click={() => handleEliminarMesa(group)}
+                        title={canEliminarMesa ? "Eliminar registro de esta mesa" : "Solo se puede eliminar si la mesa únicamente tiene apertura"}
+                      >
+                        Eliminar
+                      </button>
+                    {/if}
+                  </div>
+                </td>
               </tr>
             {/each}
           {/if}
@@ -1065,10 +1292,8 @@
           <tfoot>
             <tr class="total-row footer-apertura">
               <td colspan="2" class="total-label-cell">TOTAL APERTURA</td>
-              <td class="td-center"><span class="mov-badge mov-apertura" title="Apertura">Apertura</span></td>
               {#each salaFichas as valor}
-                {@const sumAp = mesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
-                <td class="td-center total-val-cell">{sumAp}</td>
+                <td class="td-center total-val-cell">{getSumAperturaChip(valor)}</td>
               {/each}
               <td class="td-center grand-total-cell ap-grand-total">
                 $ {formatMoney(totalGeneralApertura)}
@@ -1079,9 +1304,8 @@
             {#if totalGeneralRellenos > 0}
               <tr class="total-row footer-rellenos">
                 <td colspan="2" class="total-label-cell">TOTAL FILL</td>
-                <td class="td-center"><span class="mov-badge mov-relleno" title="Fill">Fill</span></td>
                 {#each salaFichas as valor}
-                  {@const sumR = mesaGroups.reduce((acc, g) => acc + (g.rellenosDevoluciones || []).filter(m => m.tipo === 'relleno').reduce((a, b) => a + getMovChipCount(b, valor), 0), 0)}
+                  {@const sumR = getSumRellenosChip(valor)}
                   <td class="td-center total-val-cell font-mono">{sumR > 0 ? sumR : '—'}</td>
                 {/each}
                 <td class="td-center grand-total-cell text-blue">
@@ -1094,9 +1318,8 @@
             {#if totalGeneralDevoluciones > 0}
               <tr class="total-row footer-devoluciones">
                 <td colspan="2" class="total-label-cell">TOTAL CRED</td>
-                <td class="td-center"><span class="mov-badge mov-devolucion" title="Cred">Cred</span></td>
                 {#each salaFichas as valor}
-                  {@const sumD = mesaGroups.reduce((acc, g) => acc + (g.rellenosDevoluciones || []).filter(m => m.tipo === 'devolucion').reduce((a, b) => a + getMovChipCount(b, valor), 0), 0)}
+                  {@const sumD = getSumDevolucionesChip(valor)}
                   <td class="td-center total-val-cell font-mono">{sumD > 0 ? sumD : '—'}</td>
                 {/each}
                 <td class="td-center grand-total-cell text-purple">
@@ -1108,10 +1331,8 @@
 
             <tr class="total-row footer-cierre">
               <td colspan="2" class="total-label-cell">TOTAL CIERRE</td>
-              <td class="td-center"><span class="mov-badge mov-cierre" title="Cierre">Cierre</span></td>
               {#each salaFichas as valor}
-                {@const sumCi = mesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.cierre, valor) || 0) : 0), 0)}
-                <td class="td-center total-val-cell">{sumCi}</td>
+                <td class="td-center total-val-cell">{getSumCierreChip(valor)}</td>
               {/each}
               <td class="td-center grand-total-cell ci-grand-total">
                 $ {formatMoney(totalGeneralCierre)}
@@ -1121,14 +1342,8 @@
 
             <tr class="total-row footer-diferencia">
               <td colspan="2" class="total-label-cell">TOTAL FINAL</td>
-              <td class="td-center"><span class="mov-badge mov-diferencia" title="Total">Total</span></td>
               {#each salaFichas as valor}
-                {@const sumAp = mesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
-                {@const sumR = mesaGroups.reduce((acc, g) => acc + (g.rellenosDevoluciones || []).filter(m => m.tipo === 'relleno').reduce((a, b) => a + getMovChipCount(b, valor), 0), 0)}
-                {@const sumD = mesaGroups.reduce((acc, g) => acc + (g.rellenosDevoluciones || []).filter(m => m.tipo === 'devolucion').reduce((a, b) => a + getMovChipCount(b, valor), 0), 0)}
-                {@const sumCi = mesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.cierre, valor) || 0) : 0), 0)}
-                {@const expectedTotal = sumAp + sumR - sumD}
-                {@const dif = sumCi - expectedTotal}
+                {@const dif = getDifTotalChip(valor)}
                 <td class="td-center total-val-cell">
                   <span class:dif-pos={dif > 0} class:dif-neg={dif < 0}>
                     {Math.abs(dif)}
@@ -1159,6 +1374,7 @@
   aperturaRecord={modalAperturaRecord}
   cierreRecord={modalCierreRecord}
   availableDenominaciones={salaFichas}
+  {listaEmpleados}
   on:close={() => { isModalOpen = false; }}
   on:saved={handleCierreSaved}
 />
@@ -1173,9 +1389,284 @@
   aperturaRecord={rdModalApertura}
   availableDenominaciones={salaFichas}
   initialTipo={rdModalTipo}
+  {listaEmpleados}
   on:close={() => { isRDModalOpen = false; }}
   on:saved={handleRDSaved}
 />
+
+<!-- Modal de Opciones de la Mesa -->
+{#if isOpcionesModalOpen && selectedOpcionesGroup}
+  {@const apTotal = Number(selectedOpcionesGroup.apertura?.total) || 0}
+  {@const hasCierre = Boolean(selectedOpcionesGroup.cierre)}
+  {@const ciTotal = hasCierre ? (Number(selectedOpcionesGroup.cierre.total) || 0) : null}
+  {@const allMovs = selectedOpcionesGroup.rellenosDevoluciones || []}
+  {@const totalR = selectedOpcionesGroup.totalRellenos || 0}
+  {@const totalD = selectedOpcionesGroup.totalDevoluciones || 0}
+  {@const difTotal = hasCierre ? ((ciTotal + totalD) - (apTotal + totalR)) : null}
+
+  <div class="modal-backdrop" on:click|self|preventDefault|stopPropagation={() => {}}>
+    <div class="modal-card modal-opciones-card">
+      <!-- Modal Header -->
+      <div class="modal-header">
+        <div>
+          <div class="header-badges-row">
+            <span class="header-badge">Control de Mesa</span>
+            {#if selectedOpcionesGroup.juegoNombre}
+              <span class="badge-juego">{selectedOpcionesGroup.juegoNombre}</span>
+            {/if}
+          </div>
+          <h3 class="header-main-title">
+            Opciones: <span class="mesa-highlight">{selectedOpcionesGroup.mesaNombre}</span>
+          </h3>
+          <p class="header-sub">
+            Balance general &bull; Total Neto: 
+            <strong class={difTotal !== null ? (difTotal > 0 ? 'text-green' : (difTotal < 0 ? 'text-red' : 'text-neutral')) : ''}>
+              {difTotal !== null ? (difTotal < 0 ? `( - ${formatMoney(Math.abs(difTotal))} )` : `$ ${formatMoney(difTotal)}`) : '—'}
+            </strong>
+          </p>
+        </div>
+        <button type="button" class="btn-close" on:click={handleCloseOpcionesModal} title="Cerrar">✕</button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="modal-body modal-opciones-body">
+        <!-- 3 Botones Principales: Fill, Cierre, Cred -->
+        <div class="opciones-action-buttons-grid">
+          <button 
+            type="button" 
+            class="btn-opc-action btn-opc-fill"
+            on:click={() => {
+              handleOpenRellenoModal('relleno', selectedOpcionesGroup.mesaObj || { uuid: selectedOpcionesGroup.mesaId, id: selectedOpcionesGroup.mesaId, nombre: selectedOpcionesGroup.mesaNombre, juego_nombre: selectedOpcionesGroup.juegoNombre }, selectedOpcionesGroup.apertura);
+            }}
+          >
+            <span class="opc-btn-icon">➕</span>
+            <div class="opc-btn-text">
+              <span class="opc-title">FILL</span>
+              <span class="opc-sub">Relleno de Mesa</span>
+            </div>
+          </button>
+
+          <button 
+            type="button" 
+            class="btn-opc-action btn-opc-cierre"
+            on:click={() => {
+              handleOpenCierreModal(selectedOpcionesGroup);
+            }}
+          >
+            <span class="opc-btn-icon">🔒</span>
+            <div class="opc-btn-text">
+              <span class="opc-title">CIERRE</span>
+              <span class="opc-sub">Arquear Mesa</span>
+            </div>
+          </button>
+
+          <button 
+            type="button" 
+            class="btn-opc-action btn-opc-cred"
+            on:click={() => {
+              handleOpenRellenoModal('devolucion', selectedOpcionesGroup.mesaObj || { uuid: selectedOpcionesGroup.mesaId, id: selectedOpcionesGroup.mesaId, nombre: selectedOpcionesGroup.mesaNombre, juego_nombre: selectedOpcionesGroup.juegoNombre }, selectedOpcionesGroup.apertura);
+            }}
+          >
+            <span class="opc-btn-icon">↩️</span>
+            <div class="opc-btn-text">
+              <span class="opc-title">CRED</span>
+              <span class="opc-sub">Devolución</span>
+            </div>
+          </button>
+        </div>
+
+        <!-- Botón de Nota / Observación que abarca completo -->
+        <div class="nota-section-container">
+          {#if !isEditingNota}
+            <button 
+              type="button" 
+              class="btn-nota-full"
+              on:click={() => {
+                notaTexto = selectedOpcionesGroup.apertura?.nota || '';
+                isEditingNota = true;
+              }}
+            >
+              <span class="nota-icon">📝</span>
+              <span class="nota-btn-title">
+                {selectedOpcionesGroup.apertura?.nota ? 'Editar Nota de la Mesa' : 'Agregar Nota a la Mesa'}
+              </span>
+              {#if selectedOpcionesGroup.apertura?.nota}
+                <span class="nota-preview-chip">Con Nota</span>
+              {/if}
+            </button>
+
+            {#if selectedOpcionesGroup.apertura?.nota}
+              <div class="nota-display-box">
+                <span class="nota-display-label">Nota registrada:</span>
+                <p class="nota-display-text">{selectedOpcionesGroup.apertura.nota}</p>
+              </div>
+            {/if}
+          {:else}
+            <div class="nota-editor-box">
+              <label for="textarea-nota-mesa" class="nota-editor-label">Nota / Observación de la mesa:</label>
+              <textarea 
+                id="textarea-nota-mesa"
+                class="nota-textarea"
+                placeholder="Escriba aquí la nota o novedad relevante para esta mesa..."
+                bind:value={notaTexto}
+                rows="3"
+              ></textarea>
+              <div class="nota-editor-actions">
+                <button type="button" class="btn-nota-cancel" on:click={() => { isEditingNota = false; }}>
+                  Cancelar
+                </button>
+                <button type="button" class="btn-nota-save" on:click={handleGuardarNota}>
+                  Guardar Nota
+                </button>
+              </div>
+            </div>
+          {/if}
+        </div>
+
+        <!-- Tabla detallada de la Mesa: Apertura, Fills, Creds, Cierre, Total -->
+        <div class="opciones-table-container">
+          <div class="opciones-table-header-title">
+            <span>Historial y Estado Detallado de la Mesa</span>
+          </div>
+          <table class="opciones-detail-table">
+            <thead>
+              <tr>
+                <th class="th-left">Operación</th>
+                <th class="th-center">Hora</th>
+                <th class="th-left">Responsable</th>
+                {#each salaFichas as valor}
+                  <th class="th-center">$ {valor}</th>
+                {/each}
+                <th class="th-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- 1. Apertura -->
+              <tr class="opc-row-apertura">
+                <td class="td-left">
+                  <span class="mov-badge mov-apertura">Apertura</span>
+                </td>
+                <td class="td-center font-mono">
+                  {selectedOpcionesGroup.apertura?.hora_apertura || '—'}
+                </td>
+                <td class="td-left emp-name-cell">
+                  {selectedOpcionesGroup.apertura?.empleado_apertura_nombre || '—'}
+                </td>
+                {#each salaFichas as valor}
+                  {@const apCount = getChipCount(selectedOpcionesGroup.apertura, valor)}
+                  <td class="td-center count-val">
+                    {apCount !== null ? apCount : '—'}
+                  </td>
+                {/each}
+                <td class="td-right total-val font-mono font-bold">
+                  $ {formatMoney(apTotal)}
+                </td>
+              </tr>
+
+              <!-- 2. Movimientos Fills y Creds -->
+              {#each allMovs as mov}
+                <tr class="opc-row-mov" class:row-relleno={mov.tipo === 'relleno'} class:row-devolucion={mov.tipo === 'devolucion'}>
+                  <td class="td-left">
+                    <span class="mov-badge {mov.tipo === 'relleno' ? 'mov-relleno' : 'mov-devolucion'}">
+                      {formatMovBadge(mov, allMovs)}
+                    </span>
+                  </td>
+                  <td class="td-center font-mono">
+                    {mov.hora || '—'}
+                  </td>
+                  <td class="td-left emp-name-cell">
+                    {mov.empleado_nombre || '—'}
+                  </td>
+                  {#each salaFichas as valor}
+                    {@const count = getMovChipCount(mov, valor)}
+                    <td class="td-center count-val font-mono">
+                      {count > 0 ? count : '—'}
+                    </td>
+                  {/each}
+                  <td class="td-right total-val font-mono font-bold {mov.tipo === 'relleno' ? 'text-blue' : 'text-purple'}">
+                    $ {formatMoney(mov.total)}
+                  </td>
+                </tr>
+              {/each}
+
+              <!-- 3. Cierre -->
+              <tr class="opc-row-cierre">
+                <td class="td-left">
+                  <span class="mov-badge {hasCierre ? 'mov-cierre' : 'mov-pendiente'}">Cierre</span>
+                </td>
+                <td class="td-center font-mono">
+                  {selectedOpcionesGroup.cierre?.hora_cierre || selectedOpcionesGroup.apertura?.hora_cierre || '—'}
+                </td>
+                <td class="td-left emp-name-cell">
+                  {selectedOpcionesGroup.cierre?.empleado_cierre_nombre || selectedOpcionesGroup.apertura?.empleado_cierre_nombre || '—'}
+                </td>
+                {#each salaFichas as valor}
+                  {@const ciCount = hasCierre ? getChipCount(selectedOpcionesGroup.cierre, valor) : null}
+                  <td class="td-center count-val" class:val-pending={!hasCierre}>
+                    {ciCount !== null ? ciCount : '—'}
+                  </td>
+                {/each}
+                <td class="td-right total-val font-mono font-bold">
+                  {hasCierre ? `$ ${formatMoney(ciTotal)}` : '—'}
+                </td>
+              </tr>
+
+              <!-- 4. Total (Diferencia) -->
+              <tr class="opc-row-total">
+                <td class="td-left font-bold" colspan="3">
+                  <span class="mov-badge mov-diferencia">TOTAL (DIFERENCIA)</span>
+                </td>
+                {#each salaFichas as valor}
+                  {@const apC = getChipCount(selectedOpcionesGroup.apertura, valor)}
+                  {@const ciC = hasCierre ? getChipCount(selectedOpcionesGroup.cierre, valor) : null}
+                  {@const rChips = allMovs.filter(m => m.tipo === 'relleno').reduce((a, b) => a + getMovChipCount(b, valor), 0)}
+                  {@const dChips = allMovs.filter(m => m.tipo === 'devolucion').reduce((a, b) => a + getMovChipCount(b, valor), 0)}
+                  {@const expected = (apC !== null ? apC : 0) + rChips - dChips}
+                  {@const difChips = (hasCierre && ciC !== null && apC !== null) ? (ciC - expected) : null}
+                  <td class="td-center count-val">
+                    {#if difChips !== null}
+                      <span 
+                        class="dif-chips-val"
+                        class:dif-pos={difChips > 0}
+                        class:dif-neg={difChips < 0}
+                        class:dif-zero={difChips === 0}
+                      >
+                        {difChips > 0 ? `+${difChips}` : (difChips < 0 ? `${difChips}` : '0')}
+                      </span>
+                    {:else}
+                      <span class="val-pending">—</span>
+                    {/if}
+                  </td>
+                {/each}
+                <td class="td-right total-val font-mono font-bold">
+                  {#if difTotal !== null}
+                    <span 
+                      class="dif-monto-badge"
+                      class:dif-pos={difTotal > 0}
+                      class:dif-neg={difTotal < 0}
+                      class:dif-neu={difTotal === 0}
+                    >
+                      {difTotal < 0 ? `( - ${formatMoney(Math.abs(difTotal))} )` : `$ ${formatMoney(difTotal)}`}
+                    </span>
+                  {:else}
+                    <span class="val-pending">—</span>
+                  {/if}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="modal-footer">
+        <button type="button" class="btn-cancelar" on:click={handleCloseOpcionesModal}>
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   /* ─────────────────────────────────────────────────────────────
@@ -1789,5 +2280,472 @@
   @keyframes spin {
     to { transform: rotate(360deg); }
   }
+
+  /* Estilos para Fila única consolidada y Acciones */
+  .single-mesa-row {
+    transition: background 0.15s ease;
+  }
+  .single-mesa-row:hover {
+    background: #f8fafc;
+  }
+  .mesa-hora-tag {
+    display: inline-block;
+    font-size: 10.5px;
+    color: #64748b;
+    background: #f1f5f9;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-top: 2px;
+    font-family: monospace;
+  }
+  .acciones-btn-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    flex-wrap: nowrap;
+  }
+  .btn-action-pill {
+    padding: 5px 12px;
+    font-size: 11.5px;
+    font-weight: 700;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+  .btn-action-liquidar {
+    background: #ecfdf5;
+    color: #047857;
+    border-color: #a7f3d0;
+  }
+  .btn-action-liquidar:hover:not(:disabled) {
+    background: #d1fae5;
+    border-color: #6ee7b7;
+  }
+  .btn-action-liquidar:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    background: #f1f5f9;
+    color: #94a3b8;
+    border-color: #e2e8f0;
+  }
+  .btn-action-opciones {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-color: #bfdbfe;
+  }
+  .btn-action-opciones:hover {
+    background: #dbeafe;
+    border-color: #93c5fd;
+  }
+  .btn-action-eliminar {
+    background: #fef2f2;
+    color: #dc2626;
+    border-color: #fecaca;
+  }
+  .btn-action-eliminar:hover:not(:disabled) {
+    background: #fee2e2;
+    border-color: #fca5a5;
+  }
+  .btn-action-eliminar:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: #f8fafc;
+    color: #cbd5e1;
+    border-color: #f1f5f9;
+  }
+
+  /* Rayo y Autocompletado en Apertura */
+  .hora-header-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2px;
+  }
+  .btn-rayo {
+    background: #eff6ff;
+    color: #2563eb;
+    border: 1px solid #bfdbfe;
+    border-radius: 6px;
+    padding: 2px 7px;
+    font-size: 10.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-rayo:hover {
+    background: #dbeafe;
+    border-color: #93c5fd;
+  }
+  .cell-autocomplete-container {
+    position: relative;
+    width: 100%;
+  }
+  .form-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #1e293b;
+    background: #ffffff;
+    box-sizing: border-box;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .form-input:focus, .form-input.input-active {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    outline: none;
+  }
+  .inline-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15);
+    z-index: 10000;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+  .inline-dropdown-header {
+    padding: 6px 10px;
+    background: #f1f5f9;
+    font-size: 11px;
+    color: #64748b;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .inline-dropdown-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .inline-dropdown-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #f8fafc;
+    transition: background 0.12s;
+  }
+  .inline-dropdown-item:hover, .inline-dropdown-item.selected {
+    background: #eff6ff;
+  }
+  .sug-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .sug-name {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #1e293b;
+  }
+  .sug-cargo {
+    font-size: 11px;
+    color: #64748b;
+  }
+  .sug-tab-badge {
+    background: #e2e8f0;
+    color: #475569;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  /* Modal de Opciones de Mesa */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    padding: 16px;
+  }
+  .modal-opciones-card {
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.25);
+    width: 100%;
+    max-width: 900px;
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+  }
+  .modal-opciones-body {
+    padding: 20px 24px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .opciones-action-buttons-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .btn-opc-action {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    text-align: left;
+  }
+  .btn-opc-fill {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    color: #1e40af;
+  }
+  .btn-opc-fill:hover {
+    background: #dbeafe;
+    border-color: #93c5fd;
+    transform: translateY(-1px);
+  }
+  .btn-opc-cierre {
+    background: #ecfdf5;
+    border-color: #a7f3d0;
+    color: #065f46;
+  }
+  .btn-opc-cierre:hover {
+    background: #d1fae5;
+    border-color: #6ee7b7;
+    transform: translateY(-1px);
+  }
+  .btn-opc-cred {
+    background: #faf5ff;
+    border-color: #e9d5ff;
+    color: #6b21a8;
+  }
+  .btn-opc-cred:hover {
+    background: #f3e8ff;
+    border-color: #d8b4fe;
+    transform: translateY(-1px);
+  }
+  .opc-btn-icon {
+    font-size: 20px;
+  }
+  .opc-btn-text {
+    display: flex;
+    flex-direction: column;
+  }
+  .opc-title {
+    font-size: 13.5px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+  }
+  .opc-sub {
+    font-size: 11px;
+    opacity: 0.85;
+  }
+
+  /* Sección de Nota */
+  .nota-section-container {
+    width: 100%;
+  }
+  .btn-nota-full {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 11px 16px;
+    background: #f8fafc;
+    border: 1px dashed #cbd5e1;
+    border-radius: 10px;
+    color: #334155;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .btn-nota-full:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+    color: #0f172a;
+  }
+  .nota-preview-chip {
+    background: #dbeafe;
+    color: #1e40af;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 12px;
+  }
+  .nota-display-box {
+    margin-top: 8px;
+    padding: 10px 14px;
+    background: #fffbeb;
+    border: 1px solid #fef3c7;
+    border-left: 4px solid #f59e0b;
+    border-radius: 6px;
+  }
+  .nota-display-label {
+    font-size: 10.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: #b45309;
+    letter-spacing: 0.5px;
+  }
+  .nota-display-text {
+    margin: 4px 0 0;
+    font-size: 12.5px;
+    color: #78350f;
+    line-height: 1.4;
+  }
+  .nota-editor-box {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+  }
+  .nota-editor-label {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #475569;
+  }
+  .nota-textarea {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #1e293b;
+    background: #ffffff;
+    box-sizing: border-box;
+    font-family: inherit;
+  }
+  .nota-editor-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  .btn-nota-cancel {
+    padding: 6px 14px;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+    cursor: pointer;
+  }
+  .btn-nota-save {
+    padding: 6px 16px;
+    background: #2563eb;
+    border: 1px solid #1d4ed8;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #ffffff;
+    cursor: pointer;
+  }
+
+  /* Tabla de Detalle en Modal de Opciones */
+  .opciones-table-container {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .opciones-table-header-title {
+    padding: 10px 14px;
+    background: #0f172a;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .opciones-detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .opciones-detail-table th {
+    background: #1e293b;
+    color: #94a3b8;
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    border-bottom: 1px solid #334155;
+  }
+  .opciones-detail-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .opc-row-apertura {
+    background: #ffffff;
+  }
+  .opc-row-cierre {
+    background: #f8fafc;
+  }
+  .opc-row-total {
+    background: #f1f5f9;
+    font-weight: 700;
+    border-top: 2px solid #cbd5e1;
+  }
+  .badge-juego {
+    background: #dbeafe;
+    color: #1e40af;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+  .emp-name-cell {
+    font-size: 12px;
+    font-weight: 600;
+    color: #1e293b;
+  }
+  .text-green { color: #16a34a !important; }
+  .text-red { color: #dc2626 !important; }
+  .text-neutral { color: #475569 !important; }
+  .btn-close {
+    background: transparent;
+    border: none;
+    font-size: 16px;
+    color: #64748b;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+  .btn-close:hover {
+    background: #fee2e2;
+    color: #ef4444;
+  }
+  .btn-cancelar {
+    padding: 8px 18px;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #475569;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-cancelar:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+  }
+
 </style>
 

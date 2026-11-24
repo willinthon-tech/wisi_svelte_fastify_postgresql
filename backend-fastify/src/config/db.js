@@ -306,6 +306,13 @@ export async function initDb() {
       await sql.unsafe(`ALTER TABLE libro_aportes ADD COLUMN IF NOT EXISTS hora VARCHAR(20);`);
       await sql.unsafe(`ALTER TABLE libro_aportes ADD COLUMN IF NOT EXISTS operador VARCHAR(150);`);
       await sql.unsafe(`ALTER TABLE libro_arqueo_fichas ADD COLUMN IF NOT EXISTS rellenos_devoluciones JSONB DEFAULT '[]'::jsonb;`);
+      await sql.unsafe(`ALTER TABLE libro_arqueo_fichas ADD COLUMN IF NOT EXISTS hora_apertura VARCHAR(10);`);
+      await sql.unsafe(`ALTER TABLE libro_arqueo_fichas ADD COLUMN IF NOT EXISTS empleado_apertura_uuid UUID;`);
+      await sql.unsafe(`ALTER TABLE libro_arqueo_fichas ADD COLUMN IF NOT EXISTS empleado_apertura_nombre VARCHAR(255);`);
+      await sql.unsafe(`ALTER TABLE libro_arqueo_fichas ADD COLUMN IF NOT EXISTS hora_cierre VARCHAR(10);`);
+      await sql.unsafe(`ALTER TABLE libro_arqueo_fichas ADD COLUMN IF NOT EXISTS empleado_cierre_uuid UUID;`);
+      await sql.unsafe(`ALTER TABLE libro_arqueo_fichas ADD COLUMN IF NOT EXISTS empleado_cierre_nombre VARCHAR(255);`);
+      await sql.unsafe(`ALTER TABLE libro_arqueo_fichas ADD COLUMN IF NOT EXISTS nota TEXT;`);
       await sql.unsafe(`ALTER TABLE libro_datos DROP CONSTRAINT IF EXISTS libro_datos_libro_uuid_key;`);
       await sql.unsafe(`DROP INDEX IF EXISTS libro_datos_libro_uuid_key;`);
     } catch (eLibroCol) {

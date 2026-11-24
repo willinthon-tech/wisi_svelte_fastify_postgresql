@@ -9797,6 +9797,13 @@ export async function getLibroArqueoFichasModel(libroId, multisalaUuid = null) {
       a.rellenos_devoluciones,
       a.total,
       a.observaciones,
+      a.nota,
+      a.hora_apertura,
+      a.empleado_apertura_uuid,
+      a.empleado_apertura_nombre,
+      a.hora_cierre,
+      a.empleado_cierre_uuid,
+      a.empleado_cierre_nombre,
       a.created_at,
       a.updated_at,
       m.nombre AS mesa_nombre,
@@ -9839,6 +9846,15 @@ export async function createOrUpdateLibroArqueoFichaModel(data) {
 
   const tipo = (data.tipo && String(data.tipo).toLowerCase().trim() === 'cierre') ? 'cierre' : 'apertura';
   const observaciones = data.observaciones ? String(data.observaciones).trim() : null;
+  const nota = data.nota !== undefined ? (data.nota ? String(data.nota).trim() : null) : observaciones;
+
+  const horaApertura = data.hora_apertura ? String(data.hora_apertura).trim() : null;
+  const empleadoAperturaUuid = (data.empleado_apertura_uuid && isUuid(data.empleado_apertura_uuid)) ? data.empleado_apertura_uuid : null;
+  const empleadoAperturaNombre = data.empleado_apertura_nombre ? String(data.empleado_apertura_nombre).trim() : null;
+
+  const horaCierre = data.hora_cierre ? String(data.hora_cierre).trim() : null;
+  const empleadoCierreUuid = (data.empleado_cierre_uuid && isUuid(data.empleado_cierre_uuid)) ? data.empleado_cierre_uuid : null;
+  const empleadoCierreNombre = data.empleado_cierre_nombre ? String(data.empleado_cierre_nombre).trim() : null;
 
   let rawFichas = [];
   if (Array.isArray(data.fichas)) {
@@ -9884,7 +9900,14 @@ export async function createOrUpdateLibroArqueoFichaModel(data) {
         fichas: fichasClean,
         rellenos_devoluciones: rellenosDevolucionesClean !== null ? rellenosDevolucionesClean : (inMemoryData.libro_arqueo_fichas[existingIdx].rellenos_devoluciones || []),
         total,
-        observaciones,
+        observaciones: nota || observaciones,
+        nota: nota || inMemoryData.libro_arqueo_fichas[existingIdx].nota,
+        hora_apertura: horaApertura || inMemoryData.libro_arqueo_fichas[existingIdx].hora_apertura,
+        empleado_apertura_uuid: empleadoAperturaUuid || inMemoryData.libro_arqueo_fichas[existingIdx].empleado_apertura_uuid,
+        empleado_apertura_nombre: empleadoAperturaNombre || inMemoryData.libro_arqueo_fichas[existingIdx].empleado_apertura_nombre,
+        hora_cierre: horaCierre || inMemoryData.libro_arqueo_fichas[existingIdx].hora_cierre,
+        empleado_cierre_uuid: empleadoCierreUuid || inMemoryData.libro_arqueo_fichas[existingIdx].empleado_cierre_uuid,
+        empleado_cierre_nombre: empleadoCierreNombre || inMemoryData.libro_arqueo_fichas[existingIdx].empleado_cierre_nombre,
         updated_at: new Date().toISOString()
       };
       return inMemoryData.libro_arqueo_fichas[existingIdx];
@@ -9902,7 +9925,14 @@ export async function createOrUpdateLibroArqueoFichaModel(data) {
       fichas: fichasClean,
       rellenos_devoluciones: rellenosDevolucionesClean || [],
       total,
-      observaciones,
+      observaciones: nota || observaciones,
+      nota,
+      hora_apertura: horaApertura,
+      empleado_apertura_uuid: empleadoAperturaUuid,
+      empleado_apertura_nombre: empleadoAperturaNombre,
+      hora_cierre: horaCierre,
+      empleado_cierre_uuid: empleadoCierreUuid,
+      empleado_cierre_nombre: empleadoCierreNombre,
       mesa_nombre: mesa.nombre || `Mesa #${mesaUuid}`,
       juego_nombre: mesa.juego_nombre || '',
       created_at: new Date().toISOString(),
@@ -9942,7 +9972,14 @@ export async function createOrUpdateLibroArqueoFichaModel(data) {
         fichas = ${JSON.stringify(fichasClean)}::jsonb,
         rellenos_devoluciones = COALESCE(${rellenosDevolucionesClean !== null ? JSON.stringify(rellenosDevolucionesClean) : null}::jsonb, rellenos_devoluciones, '[]'::jsonb),
         total = ${total},
-        observaciones = ${observaciones},
+        hora_apertura = COALESCE(${horaApertura}, hora_apertura),
+        empleado_apertura_uuid = COALESCE(${empleadoAperturaUuid ? sql`${empleadoAperturaUuid}::uuid` : sql`NULL`}, empleado_apertura_uuid),
+        empleado_apertura_nombre = COALESCE(${empleadoAperturaNombre}, empleado_apertura_nombre),
+        hora_cierre = COALESCE(${horaCierre}, hora_cierre),
+        empleado_cierre_uuid = COALESCE(${empleadoCierreUuid ? sql`${empleadoCierreUuid}::uuid` : sql`NULL`}, empleado_cierre_uuid),
+        empleado_cierre_nombre = COALESCE(${empleadoCierreNombre}, empleado_cierre_nombre),
+        nota = COALESCE(${nota}, nota),
+        observaciones = COALESCE(${nota}, observaciones),
         is_deleted = false,
         deleted_at = NULL,
         updated_at = CURRENT_TIMESTAMP
@@ -9954,7 +9991,10 @@ export async function createOrUpdateLibroArqueoFichaModel(data) {
     const res = await sql`
       INSERT INTO libro_arqueo_fichas (
         uuid, libro_uuid, mesa_uuid, multisala_uuid,
-        tipo, fichas, rellenos_devoluciones, total, observaciones
+        tipo, fichas, rellenos_devoluciones, total,
+        hora_apertura, empleado_apertura_uuid, empleado_apertura_nombre,
+        hora_cierre, empleado_cierre_uuid, empleado_cierre_nombre,
+        nota, observaciones
       )
       VALUES (
         ${arqueoUuid}::uuid,
@@ -9965,7 +10005,14 @@ export async function createOrUpdateLibroArqueoFichaModel(data) {
         ${JSON.stringify(fichasClean)}::jsonb,
         ${JSON.stringify(rellenosDevolucionesClean || [])}::jsonb,
         ${total},
-        ${observaciones}
+        ${horaApertura},
+        ${empleadoAperturaUuid ? sql`${empleadoAperturaUuid}::uuid` : null},
+        ${empleadoAperturaNombre},
+        ${horaCierre},
+        ${empleadoCierreUuid ? sql`${empleadoCierreUuid}::uuid` : null},
+        ${empleadoCierreNombre},
+        ${nota},
+        ${nota}
       )
       RETURNING uuid
     `;
@@ -9986,6 +10033,13 @@ export async function createOrUpdateLibroArqueoFichaModel(data) {
       a.rellenos_devoluciones,
       a.total,
       a.observaciones,
+      a.nota,
+      a.hora_apertura,
+      a.empleado_apertura_uuid,
+      a.empleado_apertura_nombre,
+      a.hora_cierre,
+      a.empleado_cierre_uuid,
+      a.empleado_cierre_nombre,
       a.created_at,
       a.updated_at,
       m.nombre AS mesa_nombre,

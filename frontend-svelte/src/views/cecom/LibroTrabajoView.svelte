@@ -29,7 +29,6 @@
     { id: 'datos', label: 'Datos', category: 'Libro', categoryKey: 'libro', icon: '', description: 'Horarios operativos de sala y asignación de operadores' },
     { id: 'drop-mesas', label: 'Drop', category: 'Mesas', categoryKey: 'mesas', icon: '', description: 'Registro y cuadre de drop de mesas en vivo' },
     { id: 'arqueo-fichas', label: 'Apertura y Cierre', category: 'Mesas', categoryKey: 'mesas', icon: '', description: 'Control y arqueo de fichas (apertura y cierre) de mesas en vivo' },
-    { id: 'novedades-mesas', label: 'Novedades', category: 'Mesas', categoryKey: 'mesas', icon: '', description: 'Control de aperturas, cierres, pitboss y croupiers de mesas' },
     { id: 'conteo-maquinas', label: 'Billetero', category: 'Máquinas', categoryKey: 'maquinas', icon: '', description: 'Registro y cuadre de conteo de billetes de máquinas por rango' },
     { id: 'aportes-maquinas', label: 'Aporte y Devoluciones', category: 'Máquinas', categoryKey: 'maquinas', icon: '', description: 'Registro y control de aportes y devoluciones de máquinas por empleado y rango' },
     { id: 'control-clientes', label: 'Clientes', category: 'Control', categoryKey: 'control', icon: '', description: 'Seguimiento de jugadores y eventos de sala' },
@@ -101,10 +100,8 @@
         activeSubvista = 'aportes-maquinas';
       } else if (secondPart === 'conteo' || secondPart === 'conteo-maquinas' || secondPart === 'billetero') {
         activeSubvista = 'conteo-maquinas';
-      } else if (secondPart === 'arqueo' || secondPart === 'arqueo-fichas' || secondPart === 'sobrantes-faltantes' || secondPart === 'apertura-cierre') {
+      } else if (secondPart === 'arqueo' || secondPart === 'arqueo-fichas' || secondPart === 'sobrantes-faltantes' || secondPart === 'apertura-cierre' || secondPart === 'novedades' || secondPart === 'novedades-mesas') {
         activeSubvista = 'arqueo-fichas';
-      } else if (secondPart === 'novedades' || secondPart === 'novedades-mesas') {
-        activeSubvista = 'novedades-mesas';
       } else if (secondPart === 'clientes' || secondPart === 'control-clientes') {
         activeSubvista = 'control-clientes';
       } else if (secondPart === 'llaves' || secondPart === 'control-llaves') {
@@ -354,10 +351,8 @@
         <LibroDatosView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
       {:else if activeSubvista === 'drop-mesas'}
         <LibroDropMesasView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
-      {:else if activeSubvista === 'arqueo-fichas' || activeSubvista === 'arqueo'}
+      {:else if activeSubvista === 'arqueo-fichas' || activeSubvista === 'arqueo' || activeSubvista === 'novedades-mesas'}
         <LibroArqueoFichasView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
-      {:else if activeSubvista === 'novedades-mesas'}
-        <LibroNovedadesMesasView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
       {:else if activeSubvista === 'conteo-maquinas'}
         <LibroConteoMaquinasView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
       {:else if activeSubvista === 'aportes-maquinas' || activeSubvista === 'aportes'}

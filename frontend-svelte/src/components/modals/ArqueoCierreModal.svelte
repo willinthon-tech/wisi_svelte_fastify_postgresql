@@ -17,6 +17,7 @@
   export let aperturaRecord = null;
   export let cierreRecord = null;
   export let availableDenominaciones = [];
+  export let listaEmpleados = [];
 
   $: modalVisible = show || isOpen;
 
@@ -27,6 +28,88 @@
   let observaciones = '';
   let rows = [];
 
+  // Empleado que realiza el Cierre y Hora de Cierre
+  let empleadoCierreNombre = '';
+  let empleadoCierreUuid = null;
+  let horaCierre = '';
+  let empSugTarget = false;
+  let empSugIndex = -1;
+
+  function normalizeSearchStr(str) {
+    return String(str || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  }
+
+  $: filteredEmpSuggestions = (() => {
+    if (!empSugTarget) return [];
+    const q = (empleadoCierreNombre || '').trim();
+    if (!q) return (listaEmpleados || []).slice(0, 10);
+    const normQ = normalizeSearchStr(q);
+    const tokens = normQ.split(/\s+/).filter(Boolean);
+    return (listaEmpleados || []).filter(emp => {
+      const targetText = normalizeSearchStr(`${emp.nombre || ''} ${emp.cargo_nombre || ''} ${emp.cedula || ''}`);
+      return tokens.every(token => targetText.includes(token));
+    }).slice(0, 10);
+  })();
+
+  function handleFocusEmp() {
+    empSugTarget = true;
+    empSugIndex = -1;
+  }
+
+  function handleInputEmp(val) {
+    empleadoCierreNombre = val;
+    empleadoCierreUuid = null;
+    empSugTarget = true;
+    empSugIndex = -1;
+  }
+
+  function handleKeyDownEmp(e) {
+    if (!empSugTarget) return;
+    if (e.key === 'ArrowDown') {
+      if (filteredEmpSuggestions.length > 0) {
+        e.preventDefault();
+        empSugIndex = (empSugIndex + 1) % filteredEmpSuggestions.length;
+      }
+    } else if (e.key === 'ArrowUp') {
+      if (filteredEmpSuggestions.length > 0) {
+        e.preventDefault();
+        empSugIndex = (empSugIndex - 1 + filteredEmpSuggestions.length) % filteredEmpSuggestions.length;
+      }
+    } else if (e.key === 'Tab' || e.key === 'Enter') {
+      if (filteredEmpSuggestions.length > 0) {
+        e.preventDefault();
+        const selected = empSugIndex >= 0 ? filteredEmpSuggestions[empSugIndex] : filteredEmpSuggestions[0];
+        selectEmpSuggestion(selected);
+      }
+    } else if (e.key === 'Escape') {
+      empSugTarget = false;
+      empSugIndex = -1;
+    }
+  }
+
+  function selectEmpSuggestion(sug) {
+    empleadoCierreNombre = sug.nombre || '';
+    empleadoCierreUuid = sug.uuid || sug.id || null;
+    empSugTarget = false;
+    empSugIndex = -1;
+  }
+
+  function handleBlurEmp() {
+    setTimeout(() => {
+      empSugTarget = false;
+      empSugIndex = -1;
+    }, 200);
+  }
+
+  function setActualHoraCierre() {
+    const now = new Date();
+    horaCierre = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  }
+
   $: if (modalVisible && mesa) {
     initModalData();
   }
@@ -34,6 +117,13 @@
   function initModalData() {
     errorMessage = '';
     observaciones = cierreRecord?.observaciones || '';
+    empleadoCierreNombre = cierreRecord?.empleado_cierre_nombre || aperturaRecord?.empleado_cierre_nombre || '';
+    empleadoCierreUuid = cierreRecord?.empleado_cierre_uuid || aperturaRecord?.empleado_cierre_uuid || null;
+    horaCierre = cierreRecord?.hora_cierre || aperturaRecord?.hora_cierre || '';
+    if (!horaCierre) {
+      const now = new Date();
+      horaCierre = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    }
 
     // Mapa de cantidades en apertura
     const aperturaMap = new Map();
@@ -158,6 +248,9 @@
         fichas: fichasPayload,
         rellenos_devoluciones: allMovements,
         total: totalCierre,
+        hora_cierre: horaCierre || new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+        empleado_cierre_uuid: empleadoCierreUuid || null,
+        empleado_cierre_nombre: empleadoCierreNombre?.trim() || null,
         observaciones: observaciones ? observaciones.trim() : null,
         mesa_nombre: mesa.nombre || '',
         juego_nombre: mesa.juego_nombre || '',
@@ -254,6 +347,62 @@
             <span>{errorMessage}</span>
           </div>
         {/if}
+
+        <!-- Campos de Empleado de Cierre y Hora con Botón Rayito ⚡ -->
+        <div class="cierre-meta-row">
+          <div class="form-group-emp">
+            <label for="cierre-empleado" class="field-label">TRABAJADOR QUE CIERRA LA MESA:</label>
+            <div class="cell-autocomplete-container">
+              <input 
+                id="cierre-empleado" 
+                type="text" 
+                class="form-input {empSugTarget ? 'input-active' : ''}" 
+                placeholder="Escriba Empleado (coincidencias con Tab ⇥)..." 
+                value={empleadoCierreNombre}
+                on:focus={handleFocusEmp}
+                on:input={(e) => handleInputEmp(e.target.value)}
+                on:keydown={handleKeyDownEmp}
+                on:blur={handleBlurEmp}
+                autocomplete="off"
+              />
+
+              {#if empSugTarget && filteredEmpSuggestions.length > 0}
+                <div class="inline-dropdown">
+                  <div class="inline-dropdown-header">
+                    <span>Coincidencias (<b>Tab ⇥</b> o clic):</span>
+                  </div>
+                  <ul class="inline-dropdown-list">
+                    {#each filteredEmpSuggestions as sug, idx}
+                      <!-- svelte-ignore a11y-click-events-have-key-events -->
+                      <li 
+                        class="inline-dropdown-item {idx === empSugIndex ? 'selected' : ''}"
+                        on:mousedown|preventDefault={() => selectEmpSuggestion(sug)}
+                      >
+                        <div class="sug-info">
+                          <span class="sug-name">{sug.nombre}</span>
+                          {#if sug.cargo_nombre}
+                            <span class="sug-cargo">{sug.cargo_nombre}</span>
+                          {/if}
+                        </div>
+                        <span class="sug-tab-badge">Tab ⇥</span>
+                      </li>
+                    {/each}
+                  </ul>
+                </div>
+              {/if}
+            </div>
+          </div>
+
+          <div class="form-group-hora">
+            <div class="hora-header-line">
+              <label for="input-cierre-hora" class="field-label">HORA CIERRE:</label>
+              <button type="button" class="btn-rayo" on:click={setActualHoraCierre} title="Usar hora actual">
+                ⚡ Usar hora actual
+              </button>
+            </div>
+            <input id="input-cierre-hora" type="time" class="hora-input" bind:value={horaCierre} />
+          </div>
+        </div>
 
         <!-- Resumen comparativo de totales -->
         <div class="comparative-banner">
@@ -851,6 +1000,166 @@
   @keyframes slideUp {
     from { transform: translateY(12px); opacity: 0; }
     to { transform: translateY(0); opacity: 1; }
+  }
+
+  /* Autocomplete & Meta Inputs */
+  .cierre-meta-row {
+    display: grid;
+    grid-template-columns: 1fr 200px;
+    gap: 16px;
+    align-items: start;
+    margin-bottom: 14px;
+    padding: 10px 14px;
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+  }
+
+  .form-group-emp {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .form-group-hora {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .hora-header-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .field-label {
+    font-size: 11px;
+    font-weight: 800;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .btn-rayo {
+    background: #eff6ff;
+    color: #2563eb;
+    border: 1px solid #bfdbfe;
+    border-radius: 6px;
+    padding: 2px 7px;
+    font-size: 10.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn-rayo:hover {
+    background: #dbeafe;
+    border-color: #93c5fd;
+  }
+
+  .form-input {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #1e293b;
+    background: #ffffff;
+    box-sizing: border-box;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+
+  .form-input:focus, .form-input.input-active {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    outline: none;
+  }
+
+  .hora-input {
+    width: 100%;
+    padding: 6px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1e293b;
+    background: #ffffff;
+    box-sizing: border-box;
+  }
+
+  .cell-autocomplete-container {
+    position: relative;
+    width: 100%;
+  }
+
+  .inline-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15);
+    z-index: 10000;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+
+  .inline-dropdown-header {
+    padding: 6px 10px;
+    background: #f1f5f9;
+    font-size: 11px;
+    color: #64748b;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .inline-dropdown-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .inline-dropdown-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #f8fafc;
+    transition: background 0.12s;
+  }
+
+  .inline-dropdown-item:hover, .inline-dropdown-item.selected {
+    background: #eff6ff;
+  }
+
+  .sug-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .sug-name {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #1e293b;
+  }
+
+  .sug-cargo {
+    font-size: 11px;
+    color: #64748b;
+  }
+
+  .sug-tab-badge {
+    background: #e2e8f0;
+    color: #475569;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
   }
 </style>
 
