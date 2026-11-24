@@ -367,7 +367,9 @@
         <!-- Campos de Empleado de Cierre y Hora con Botón Rayito ⚡ -->
         <div class="cierre-meta-row">
           <div class="form-group-emp">
-            <label for="cierre-empleado" class="field-label">TRABAJADOR QUE CIERRA LA MESA:</label>
+            <div class="meta-header-line">
+              <label for="cierre-empleado" class="field-label">TRABAJADOR QUE CIERRA LA MESA:</label>
+            </div>
             <div class="cell-autocomplete-container">
               <input 
                 id="cierre-empleado" 
@@ -410,7 +412,7 @@
           </div>
 
           <div class="form-group-hora">
-            <div class="hora-header-line">
+            <div class="meta-header-line">
               <label for="input-cierre-hora" class="field-label">HORA CIERRE:</label>
               <button type="button" class="btn-rayo" on:click={setActualHoraCierre} title="Usar hora actual">
                 ⚡ Usar hora actual
@@ -535,18 +537,6 @@
             </table>
           </div>
         {/if}
-
-        <!-- Observaciones -->
-        <div class="obs-group">
-          <label for="cierre-obs" class="obs-label">Observaciones (Opcional):</label>
-          <input 
-            id="cierre-obs"
-            type="text" 
-            class="obs-input" 
-            placeholder="Novedad o detalle relevante sobre el arqueo de cierre..."
-            bind:value={observaciones}
-          />
-        </div>
       </div>
 
       <!-- Modal Footer -->
@@ -1044,10 +1034,12 @@
     gap: 4px;
   }
 
-  .hora-header-line {
+  .meta-header-line {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    min-height: 24px;
+    height: 24px;
   }
 
   .field-label {
@@ -1077,7 +1069,8 @@
 
   .form-input {
     width: 100%;
-    padding: 7px 10px;
+    height: 38px;
+    padding: 0 10px;
     border: 1px solid #cbd5e1;
     border-radius: 6px;
     font-size: 13px;
@@ -1095,7 +1088,8 @@
 
   .hora-input {
     width: 100%;
-    padding: 6px 10px;
+    height: 38px;
+    padding: 0 10px;
     border: 1px solid #cbd5e1;
     border-radius: 6px;
     font-size: 13px;

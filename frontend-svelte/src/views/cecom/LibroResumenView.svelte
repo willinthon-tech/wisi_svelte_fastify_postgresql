@@ -2193,10 +2193,13 @@
                       <tr>
                         <th class="th-mesa">MESA</th>
                         <th class="th-center th-mov">MOVIMIENTO</th>
+                        <th class="th-center th-hora">HORA</th>
+                        <th class="th-left th-resp">RESPONSABLE</th>
                         {#each section.subData.arqueoSalaFichas as valor}
                           <th class="th-center">$ {valor}</th>
                         {/each}
                         <th class="th-center th-total">TOTAL</th>
+                        <th class="th-left th-nota">NOTA</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2215,12 +2218,15 @@
                         <tr class="drop-row row-apertura">
                           <td class="td-mesa" rowspan="{rowSpanTotal}">
                             <span class="mesa-main-name font-bold">{group.mesaNombre}</span>
-                            {#if group.juegoNombre}
-                              <span class="mesa-sub-game">{group.juegoNombre}</span>
-                            {/if}
                           </td>
                           <td class="td-center td-movimiento">
                             <span class="mov-badge mov-apertura" title="Apertura">Apertura</span>
+                          </td>
+                          <td class="td-center font-mono">
+                            {group.apertura?.hora_apertura || '—'}
+                          </td>
+                          <td class="td-left emp-cell">
+                            {group.apertura?.empleado_apertura_nombre || '—'}
                           </td>
                           {#each section.subData.arqueoSalaFichas as valor}
                             {@const apCount = getChipCount(group.apertura, valor)}
@@ -2231,6 +2237,9 @@
                           <td class="td-center td-total-val ap-total-cell font-mono">
                             {formatMoney(apTotal)}
                           </td>
+                          <td class="td-left nota-cell text-xs" rowspan="{rowSpanTotal}">
+                            {group.apertura?.nota || group.cierre?.nota || group.nota || '—'}
+                          </td>
                         </tr>
 
                         <!-- Sub-filas dinámicas para cada FILL / CRED -->
@@ -2240,6 +2249,12 @@
                               <span class="mov-badge {mov.tipo === 'relleno' ? 'mov-relleno' : 'mov-devolucion'}" title="{mov.tipo === 'relleno' ? 'Fill' : 'Cred'}">
                                 {formatMovBadge(mov, allMovs)}
                               </span>
+                            </td>
+                            <td class="td-center font-mono">
+                              {mov.hora || '—'}
+                            </td>
+                            <td class="td-left emp-cell">
+                              {mov.empleado_nombre || '—'}
                             </td>
                             {#each section.subData.arqueoSalaFichas as valor}
                               {@const count = getMovChipCount(mov, valor)}
@@ -2260,6 +2275,12 @@
                               Cierre
                             </span>
                           </td>
+                          <td class="td-center font-mono">
+                            {group.cierre?.hora_cierre || group.apertura?.hora_cierre || '—'}
+                          </td>
+                          <td class="td-left emp-cell">
+                            {group.cierre?.empleado_cierre_nombre || group.apertura?.empleado_cierre_nombre || '—'}
+                          </td>
                           {#each section.subData.arqueoSalaFichas as valor}
                             {@const ciCount = hasCierre ? getChipCount(group.cierre, valor) : null}
                             <td class="td-center count-val" class:val-pending={!hasCierre}>
@@ -2276,6 +2297,8 @@
                           <td class="td-center td-movimiento">
                             <span class="mov-badge mov-diferencia" title="Total">Total</span>
                           </td>
+                          <td class="td-center font-mono">—</td>
+                          <td class="td-left emp-cell">—</td>
                           {#each section.subData.arqueoSalaFichas as valor}
                             {@const apC = getChipCount(group.apertura, valor)}
                             {@const ciC = hasCierre ? getChipCount(group.cierre, valor) : null}
@@ -2318,8 +2341,7 @@
                     <!-- Fila de Totales Generales -->
                     <tfoot>
                       <tr class="total-row footer-apertura">
-                        <td class="total-label-cell">TOTAL APERTURA</td>
-                        <td class="td-center"><span class="mov-badge mov-apertura" title="Apertura">Apertura</span></td>
+                        <td class="total-label-cell" colspan="4">TOTAL APERTURA</td>
                         {#each section.subData.arqueoSalaFichas as valor}
                           {@const sumAp = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
                           <td class="td-center total-val-cell">{sumAp}</td>
@@ -2327,12 +2349,12 @@
                         <td class="td-center grand-total-cell ap-grand-total">
                           {formatMoney(section.subData.totalArqueoApertura)}
                         </td>
+                        <td></td>
                       </tr>
 
                       {#if section.subData.totalArqueoRellenos > 0}
                         <tr class="total-row footer-rellenos">
-                          <td class="total-label-cell">TOTAL FILL</td>
-                          <td class="td-center"><span class="mov-badge mov-relleno" title="Fill">Fill</span></td>
+                          <td class="total-label-cell" colspan="4">TOTAL FILL</td>
                           {#each section.subData.arqueoSalaFichas as valor}
                             {@const sumR = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.rellenosDevoluciones || []).filter(m => m.tipo === 'relleno').reduce((a, b) => a + getMovChipCount(b, valor), 0), 0)}
                             <td class="td-center total-val-cell font-mono">{sumR > 0 ? sumR : '—'}</td>
@@ -2340,13 +2362,13 @@
                           <td class="td-center grand-total-cell text-blue">
                             {formatMoney(section.subData.totalArqueoRellenos)}
                           </td>
+                          <td></td>
                         </tr>
                       {/if}
 
                       {#if section.subData.totalArqueoDevoluciones > 0}
                         <tr class="total-row footer-devoluciones">
-                          <td class="total-label-cell">TOTAL CRED</td>
-                          <td class="td-center"><span class="mov-badge mov-devolucion" title="Cred">Cred</span></td>
+                          <td class="total-label-cell" colspan="4">TOTAL CRED</td>
                           {#each section.subData.arqueoSalaFichas as valor}
                             {@const sumD = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.rellenosDevoluciones || []).filter(m => m.tipo === 'devolucion').reduce((a, b) => a + getMovChipCount(b, valor), 0), 0)}
                             <td class="td-center total-val-cell font-mono">{sumD > 0 ? sumD : '—'}</td>
@@ -2354,12 +2376,12 @@
                           <td class="td-center grand-total-cell text-purple">
                             {formatMoney(section.subData.totalArqueoDevoluciones)}
                           </td>
+                          <td></td>
                         </tr>
                       {/if}
 
                       <tr class="total-row footer-cierre">
-                        <td class="total-label-cell">TOTAL CIERRE</td>
-                        <td class="td-center"><span class="mov-badge mov-cierre" title="Cierre">Cierre</span></td>
+                        <td class="total-label-cell" colspan="4">TOTAL CIERRE</td>
                         {#each section.subData.arqueoSalaFichas as valor}
                           {@const sumCi = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.cierre, valor) || 0) : 0), 0)}
                           <td class="td-center total-val-cell">{sumCi}</td>
@@ -2367,11 +2389,11 @@
                         <td class="td-center grand-total-cell ci-grand-total">
                           {formatMoney(section.subData.totalArqueoCierre)}
                         </td>
+                        <td></td>
                       </tr>
 
                       <tr class="total-row footer-diferencia">
-                        <td class="total-label-cell">TOTAL FINAL</td>
-                        <td class="td-center"><span class="mov-badge mov-diferencia" title="Total">Total</span></td>
+                        <td class="total-label-cell" colspan="4">TOTAL FINAL</td>
                         {#each section.subData.arqueoSalaFichas as valor}
                           {@const sumAp = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
                           {@const sumR = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.rellenosDevoluciones || []).filter(m => m.tipo === 'relleno').reduce((a, b) => a + getMovChipCount(b, valor), 0), 0)}
@@ -2390,6 +2412,7 @@
                             {formatMoney(section.subData.totalArqueoDiferencia)}
                           </span>
                         </td>
+                        <td></td>
                       </tr>
                     </tfoot>
                   </table>
@@ -5308,6 +5331,41 @@
   .sheet-detail-table.arqueo-table .th-total {
     min-width: 110px;
     text-align: center;
+  }
+
+  .sheet-detail-table.arqueo-table .th-hora {
+    width: 65px;
+    text-align: center;
+  }
+
+  .sheet-detail-table.arqueo-table .th-resp {
+    min-width: 140px;
+    text-align: left;
+  }
+
+  .sheet-detail-table.arqueo-table .th-nota {
+    min-width: 160px;
+    text-align: left;
+  }
+
+  .sheet-detail-table.arqueo-table .emp-cell {
+    font-size: 11.5px;
+    font-weight: 500;
+    color: #334155;
+    text-align: left;
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sheet-detail-table.arqueo-table .nota-cell {
+    font-size: 11.5px;
+    color: #475569;
+    vertical-align: middle;
+    white-space: normal !important;
+    max-width: 220px;
+    text-align: left;
+    line-height: 1.4;
   }
 
   .mesa-title-cell {

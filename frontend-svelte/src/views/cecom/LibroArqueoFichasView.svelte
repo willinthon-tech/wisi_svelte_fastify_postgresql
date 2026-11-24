@@ -68,6 +68,8 @@
   let selectedOpcionesGroup = null;
   let isEditingNota = false;
   let notaTexto = '';
+  let isNotaModalOpen = false;
+  let selectedNotaGroup = null;
 
   // Datos de empleados y horas para Apertura
   let localEmpleados = [];
@@ -215,7 +217,7 @@
 
   function handleOpenOpcionesModal(group) {
     selectedOpcionesGroup = group;
-    notaTexto = group.apertura?.nota || group.cierre?.nota || '';
+    notaTexto = group.apertura?.nota || group.cierre?.nota || group.nota || '';
     isEditingNota = false;
     isOpcionesModalOpen = true;
   }
@@ -226,18 +228,34 @@
     isEditingNota = false;
   }
 
+  function handleOpenNotaModal(group) {
+    selectedNotaGroup = group;
+    notaTexto = group.apertura?.nota || group.cierre?.nota || group.nota || '';
+    isOpcionesModalOpen = false;
+    isNotaModalOpen = true;
+  }
+
+  function handleCloseNotaModal() {
+    isNotaModalOpen = false;
+    if (selectedNotaGroup) {
+      selectedOpcionesGroup = mesaGroups.find(g => g.mesaId === selectedNotaGroup.mesaId) || selectedNotaGroup;
+      isOpcionesModalOpen = true;
+    }
+  }
+
   async function handleGuardarNota() {
-    if (!selectedOpcionesGroup) return;
+    const targetGroup = selectedNotaGroup || selectedOpcionesGroup;
+    if (!targetGroup) return;
     const lId = libro?.uuid || libroId || libro?.id;
-    const mId = selectedOpcionesGroup.mesaId;
+    const mId = targetGroup.mesaId;
     if (!lId || !mId) return;
 
     const nuevaNota = (notaTexto || '').trim() || null;
 
-    if (selectedOpcionesGroup.apertura) {
-      selectedOpcionesGroup.apertura.nota = nuevaNota;
-      const recUuid = selectedOpcionesGroup.apertura.uuid || selectedOpcionesGroup.apertura.id;
-      await upsertLocalItem('libro_arqueo_fichas', selectedOpcionesGroup.apertura);
+    if (targetGroup.apertura) {
+      targetGroup.apertura.nota = nuevaNota;
+      const recUuid = targetGroup.apertura.uuid || targetGroup.apertura.id;
+      await upsertLocalItem('libro_arqueo_fichas', targetGroup.apertura);
 
       const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
       if (isOffline) {
@@ -246,21 +264,27 @@
           action: 'save',
           endpoint: `/api/master/libros/${lId}/arqueo-fichas`,
           method: 'POST',
-          payload: selectedOpcionesGroup.apertura,
+          payload: targetGroup.apertura,
           uuid: recUuid
         });
       } else {
         fetch(toBackendUrl(`/api/master/libros/${lId}/arqueo-fichas`), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(selectedOpcionesGroup.apertura)
+          body: JSON.stringify(targetGroup.apertura)
         }).catch(err => console.warn('Error syncing nota:', err));
       }
     }
 
     arqueoRecords = [...arqueoRecords];
+    isNotaModalOpen = false;
     isEditingNota = false;
     triggerToast('Nota guardada con éxito', 'success');
+
+    if (targetGroup) {
+      selectedOpcionesGroup = mesaGroups.find(g => g.mesaId === targetGroup.mesaId) || targetGroup;
+      isOpcionesModalOpen = true;
+    }
   }
 
   // Resolver Sala del Libro
@@ -1035,15 +1059,15 @@
         </select>
       </div>
 
-      <!-- Pitboss / Empleado que Apertura (con autocompletado y coincidencia Tab ⇥) -->
+      <!-- Dealer / Empleado que Apertura (con autocompletado y coincidencia Tab ⇥) -->
       <div class="form-group">
-        <label for="apertura-pitboss" class="form-label">PITBOSS / EMPLEADO APERTURA:</label>
+        <label for="apertura-pitboss" class="form-label">Dealer:</label>
         <div class="cell-autocomplete-container">
           <input 
             id="apertura-pitboss" 
             type="text" 
             class="form-input {aperturaEmpSugTarget ? 'input-active' : ''}" 
-            placeholder="Escriba Pitboss (coincidencias con Tab ⇥)..." 
+            placeholder="Escriba Dealer (coincidencias con Tab ⇥)..." 
             value={empleadoAperturaNombre}
             on:focus={handleFocusAperturaEmp}
             on:input={(e) => handleInputAperturaEmp(e.target.value)}
@@ -1191,9 +1215,6 @@
                 <td class="td-mesa">
                   <div class="mesa-title-cell">
                     <span class="mesa-main-name">{group.mesaNombre}</span>
-                    {#if group.juegoNombre}
-                      <span class="mesa-sub-juego">{group.juegoNombre}</span>
-                    {/if}
                     {#if group.apertura?.hora_apertura}
                       <span class="mesa-hora-tag">🕒 {group.apertura.hora_apertura}</span>
                     {/if}
@@ -1404,7 +1425,6 @@
               handleOpenRellenoModal('relleno', selectedOpcionesGroup.mesaObj || { uuid: selectedOpcionesGroup.mesaId, id: selectedOpcionesGroup.mesaId, nombre: selectedOpcionesGroup.mesaNombre, juego_nombre: selectedOpcionesGroup.juegoNombre }, selectedOpcionesGroup.apertura, true);
             }}
           >
-            <span class="opc-btn-icon">➕</span>
             <div class="opc-btn-text">
               <span class="opc-title">FILL</span>
               <span class="opc-sub">Relleno de Mesa</span>
@@ -1418,7 +1438,6 @@
               handleOpenCierreModal(selectedOpcionesGroup);
             }}
           >
-            <span class="opc-btn-icon">🔒</span>
             <div class="opc-btn-text">
               <span class="opc-title">CIERRE</span>
               <span class="opc-sub">Arquear Mesa</span>
@@ -1432,7 +1451,6 @@
               handleOpenRellenoModal('devolucion', selectedOpcionesGroup.mesaObj || { uuid: selectedOpcionesGroup.mesaId, id: selectedOpcionesGroup.mesaId, nombre: selectedOpcionesGroup.mesaNombre, juego_nombre: selectedOpcionesGroup.juegoNombre }, selectedOpcionesGroup.apertura, true);
             }}
           >
-            <span class="opc-btn-icon">↩️</span>
             <div class="opc-btn-text">
               <span class="opc-title">CRED</span>
               <span class="opc-sub">Devolución</span>
@@ -1449,7 +1467,6 @@
             on:click={() => handleLiquidarMesa(selectedOpcionesGroup)}
             title={canLiquidarGroup ? "Liquidar mesa (Cierre = Apertura)" : "Deshabilitado porque la mesa tiene Fills o Creds"}
           >
-            <span class="sec-icon">⚡</span>
             <div class="sec-text">
               <span class="sec-title">Liquidar</span>
               <span class="sec-sub">Cierre = Apertura</span>
@@ -1458,14 +1475,10 @@
 
           <button 
             type="button" 
-            class="btn-opc-sec btn-opc-sec-nota {isEditingNota ? 'active' : ''}"
-            on:click={() => {
-              notaTexto = selectedOpcionesGroup.apertura?.nota || selectedOpcionesGroup.cierre?.nota || '';
-              isEditingNota = !isEditingNota;
-            }}
+            class="btn-opc-sec btn-opc-sec-nota"
+            on:click={() => handleOpenNotaModal(selectedOpcionesGroup)}
             title="Agregar o editar nota a la mesa"
           >
-            <span class="sec-icon">📝</span>
             <div class="sec-text">
               <span class="sec-title">Nota</span>
               <span class="sec-sub">{selectedOpcionesGroup.apertura?.nota ? 'Editar Nota' : 'Agregar Nota'}</span>
@@ -1486,7 +1499,6 @@
               }}
               title={canEliminarGroup ? "Eliminar registro de esta mesa" : "Solo se puede eliminar si la mesa únicamente tiene apertura"}
             >
-              <span class="sec-icon">🗑️</span>
               <div class="sec-text">
                 <span class="sec-title">Eliminar</span>
                 <span class="sec-sub">Quitar Arqueo</span>
@@ -1495,27 +1507,8 @@
           {/if}
         </div>
 
-        <!-- Sección de Nota (Editor o Visualizador) -->
-        {#if isEditingNota}
-          <div class="nota-editor-box">
-            <label for="textarea-nota-mesa" class="nota-editor-label">Nota / Observación de la mesa:</label>
-            <textarea 
-              id="textarea-nota-mesa"
-              class="nota-textarea"
-              placeholder="Escriba aquí la nota o novedad relevante para esta mesa..."
-              bind:value={notaTexto}
-              rows="3"
-            ></textarea>
-            <div class="nota-editor-actions">
-              <button type="button" class="btn-nota-cancel" on:click={() => { isEditingNota = false; }}>
-                Cancelar
-              </button>
-              <button type="button" class="btn-nota-save" on:click={handleGuardarNota}>
-                Guardar Nota
-              </button>
-            </div>
-          </div>
-        {:else if selectedOpcionesGroup.apertura?.nota}
+        <!-- Visualizador de Nota si existe -->
+        {#if selectedOpcionesGroup.apertura?.nota}
           <div class="nota-display-box">
             <span class="nota-display-label">Nota registrada:</span>
             <p class="nota-display-text">{selectedOpcionesGroup.apertura.nota}</p>
@@ -1661,6 +1654,43 @@
       <div class="modal-footer">
         <button type="button" class="btn-cancelar" on:click={handleCloseOpcionesModal}>
           Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Modal Separada de Nota para la Mesa -->
+{#if isNotaModalOpen && selectedNotaGroup}
+  <div class="modal-backdrop" on:click|self|preventDefault|stopPropagation={() => {}}>
+    <div class="modal-card modal-nota-card">
+      <div class="modal-header">
+        <div class="modal-header-info">
+          <span class="header-badge">Nota de Mesa</span>
+          <h3 class="header-main-title">{selectedNotaGroup.mesaNombre}</h3>
+        </div>
+        <button type="button" class="btn-close" on:click={handleCloseNotaModal} title="Cerrar">✕</button>
+      </div>
+      <div class="modal-body" style="padding: 20px 24px;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="textarea-nota-modal" class="form-label font-bold" style="margin-bottom: 8px; font-size: 12px; color: #475569;">
+            NOTA / OBSERVACIÓN DE LA MESA:
+          </label>
+          <textarea 
+            id="textarea-nota-modal"
+            class="nota-textarea"
+            placeholder="Escriba aquí la nota o novedad relevante para esta mesa..."
+            bind:value={notaTexto}
+            rows="4"
+          ></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-cancelar" on:click={handleCloseNotaModal}>
+          Cancelar
+        </button>
+        <button type="button" class="btn-guardar-nota" on:click={handleGuardarNota}>
+          Guardar Nota
         </button>
       </div>
     </div>
@@ -2859,5 +2889,39 @@
     color: #0f172a;
   }
 
+  .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 24px;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+  }
+  .modal-nota-card {
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.25);
+    width: 100%;
+    max-width: 520px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+  }
+  .btn-guardar-nota {
+    padding: 8px 18px;
+    background: #16a34a;
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-guardar-nota:hover {
+    background: #15803d;
+  }
 </style>
 

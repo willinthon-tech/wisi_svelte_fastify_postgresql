@@ -452,7 +452,9 @@
           <!-- Campos de Responsable y Hora con Botón Rayito ⚡ -->
           <div class="form-meta-row">
             <div class="form-group-emp">
-              <label for="rd-empleado" class="field-label">TRABAJADOR / RESPONSABLE:</label>
+              <div class="meta-header-line">
+                <label for="rd-empleado" class="field-label">TRABAJADOR / RESPONSABLE:</label>
+              </div>
               <div class="cell-autocomplete-container">
                 <input 
                   id="rd-empleado" 
@@ -495,7 +497,7 @@
             </div>
 
             <div class="form-group-hora">
-              <div class="hora-header-line">
+              <div class="meta-header-line">
                 <label for="input-rd-hora" class="field-label">HORA:</label>
                 <button type="button" class="btn-rayo" on:click={setActualHora} title="Usar hora actual">
                   ⚡ Usar hora actual
@@ -546,7 +548,7 @@
                 {#if isSaving}
                   <span>Guardando...</span>
                 {:else}
-                  <span>+ Agregar {activeTipo === 'relleno' ? 'Fill' : 'Cred'} ({nextCodigo})</span>
+                  <span>Agregar {activeTipo === 'relleno' ? 'Fill' : 'Cred'} ({nextCodigo})</span>
                 {/if}
               </button>
             </div>
@@ -1148,10 +1150,12 @@
     gap: 4px;
   }
 
-  .hora-header-line {
+  .meta-header-line {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    min-height: 24px;
+    height: 24px;
   }
 
   .field-label {
@@ -1181,7 +1185,8 @@
 
   .form-input {
     width: 100%;
-    padding: 7px 10px;
+    height: 38px;
+    padding: 0 10px;
     border: 1px solid #cbd5e1;
     border-radius: 6px;
     font-size: 13px;
@@ -1199,7 +1204,8 @@
 
   .hora-input {
     width: 100%;
-    padding: 6px 10px;
+    height: 38px;
+    padding: 0 10px;
     border: 1px solid #cbd5e1;
     border-radius: 6px;
     font-size: 13px;
